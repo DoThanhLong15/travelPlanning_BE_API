@@ -44,9 +44,11 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
     def add_tripplan(self, request):
         data = {k:v for k,v in request.data.items()}
 
-        request.user.tripplan_set.create(**data)
+        tripplan = request.user.tripplan_set.create(**data)
+        setattr(tripplan, "comment_count", 0)
 
-        return Response(status=status.HTTP_201_CREATED)
+
+        return Response(serializers.TripPlanDetailSerializer(tripplan).data, status=status.HTTP_201_CREATED)
 
 
 class TripPlanViewSet(viewsets.ViewSet, generics.ListAPIView):
@@ -84,12 +86,12 @@ class TripPlanViewSet(viewsets.ViewSet, generics.ListAPIView):
     def add_trip(self, request, pk):
         tripplan = self.get_object()
         if ItemOwner.has_object_permission(self, request, {}, tripplan):
-            tripplan.trip_set.create(destination=request.data.get("destination"),
+            trip = tripplan.trip_set.create(destination=request.data.get("destination"),
                                      travelTime=request.data.get("travelTime"),
                                      description=request.data.get("description"),
                                      image=request.data.get("image"))
 
-            return Response(status=status.HTTP_201_CREATED)
+            return Response(serializers.TripSerializer(trip).data, status=status.HTTP_201_CREATED)
 
         return utils.ResponseBadRequest()
 
