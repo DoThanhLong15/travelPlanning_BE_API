@@ -41,17 +41,26 @@ class TripPlanSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TripPlan
-        fields = ['id', 'title', 'user']
+        fields = ['id', 'title', 'user', 'created_date']
 
 
 class TripPlanDetailSerializer(TripPlanSerializer):
+    comment_count = serializers.IntegerField()
+
     class Meta:
         model = TripPlanSerializer.Meta.model
-        fields = TripPlanSerializer.Meta.fields + ['description', 'startLocation', 'startTime', 'endTime', 'expectCost', 'created_date']
+        fields = TripPlanSerializer.Meta.fields + ['startLocation', 'startTime', 'endTime', 'expectCost', 'description', 'comment_count']
 
 
 
 class TripSerializer(serializers.ModelSerializer):
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        if instance.image:
+            rep['image'] = instance.image.url
+
+        return rep
+
     class Meta:
         model = Trip
         fields = ['id', 'destination', 'travelTime', 'description', 'image']
@@ -68,10 +77,14 @@ class ReportUserSerializer(serializers.ModelSerializer):
 
 class CommentSerializer(serializers.ModelSerializer):
     user = UserSerializer()
+    is_join = serializers.SerializerMethodField()
+
+    def get_is_join(self, obj):
+        return obj.is_join if hasattr(obj, 'is_join') else False
 
     class Meta:
         model = Comment
-        fields = ['id', 'content', 'created_date', 'updated_date', 'user']
+        fields = ['id', 'content', 'created_date', 'updated_date', 'user', 'is_join']
 
 
 class UserJoinTripPlanSerializer(serializers.ModelSerializer):

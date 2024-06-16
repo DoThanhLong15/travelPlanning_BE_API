@@ -10,11 +10,10 @@ def get_user_by_id(**kwargs):
 
     return user
 
-def get_trip(**kwargs):
+def get_trip_by_tripplan(**kwargs):
     trip = Trip.objects
 
     q = kwargs.get('q')
-    if q:
-        trip = trip.filter(destination__icontains=q)
+    tripplan_id = kwargs.get('tripplan_id')
 
-    return trip.all()
+    return trip.filter(destination__icontains=q, tripplan_id=tripplan_id)

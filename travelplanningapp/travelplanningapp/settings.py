@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-tr2iha1f2b#qo*1)98h5ihm4zg6!ubknl^b!vzys8z95_vxi+l
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['longd8833.pythonanywhere.com']
 
 
 # Application definition
@@ -91,10 +91,10 @@ WSGI_APPLICATION = 'travelplanningapp.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'travelplanning',
-        'USER': 'root',
-        'PASSWORD': 'Abc@123',
-        'HOST': '' # mặc định localhost
+        'NAME': 'longd8833$travelplanning',
+        'USER': 'longd8833',
+        'PASSWORD': 'Aa123456789',
+        'HOST': 'longd8833.mysql.pythonanywhere-services.com' # mặc định localhost
     }
 }
 
@@ -103,7 +103,8 @@ import cloudinary
 cloudinary.config(
     cloud_name="dxfewpnlk",
     api_key="712637288875783",
-    api_secret="cSd9WeqGP5gNPiQCVIA_-SEHzEo"
+    api_secret="cSd9WeqGP5gNPiQCVIA_-SEHzEo",
+    api_proxy= 'http://proxy.server:3128'
 )
 
 
@@ -141,6 +142,10 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
+import os
+
+STATIC_ROOT = os.path.join(BASE_DIR, "static")
+
 STATIC_URL = 'static/'
 
 # Default primary key field type
@@ -150,5 +155,5 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'travelplanning.User'
 
-CLIENT_ID = 'OK2tGTyZt4USTFHE7wJJEkMsfd10MemEtt1sBLcf'
-CLIENT_SECRET = 'TaTWyCUvxkr0ASNSDShjr355gwr2pLbYogrhE3d4ZRKBiGR5RZQS9EGBJBh9J5m13qLncvIi8fMu2pt4xM9wi0hCMTUGxGmCb8maghlQN0xmvcZPPPZREz4r5xhkE1eR'
+CLIENT_ID = 'wDkYo1fGpIvxGQenm1T37bEyFLYe1LspQn3c4IfB'
+CLIENT_SECRET = 'B6eeg0461O0W0xAWh6RVd47fsZGHlaff2Y9bqodZdwNCBb0F2YrgcFWMACWUMDYK7LgM8jNCiPj3Z4c1Ka06RwoNvFZz03DQ4zbJXYwVCgW8VIiaxqczoz2cclGpAzOK'

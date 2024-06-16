@@ -1,6 +1,6 @@
 import datetime
 
-from django.db.models import Q
+from django.db.models import Q, OuterRef, Subquery, Count, Exists
 from rest_framework import viewsets, generics, status, parsers, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -15,7 +15,7 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
     parser_classes = [parsers.MultiPartParser, ]
 
     def get_permissions(self):
-        if self.action in ['current_user', 'joined_trippplan']:
+        if self.action in ['current_user', 'joined_trippplan', 'add_tripplan']:
             return [permissions.IsAuthenticated()]
 
         return [permissions.AllowAny()]
@@ -25,7 +25,10 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
         user = request.user
         if request.method.__eq__('PATCH'):
             for k, v in request.data.items():
-                setattr(user, k, v)
+                if k == 'password':
+                    user.set_password(v)
+                else:
+                    setattr(user, k, v)
             user.save()
 
         return Response(serializers.UserDetailSerializer(user).data)
@@ -37,33 +40,33 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
         return Response(serializers.UserJoinTripPlanSerializer(tripplan, many=True).data,
                         status=status.HTTP_200_OK)
 
-    @action(methods=['post'], url_path='tripplan', detail=True)
-    def add_tripplan(self, request, pk):
-        tripplan = self.get_object().tripplan_set.create(title=request.data.get('title'),
-                                                         description=request.data.get('description'),
-                                                         startLocation=request.data.get('startLocation'),
-                                                         startTime=request.data.get('startTime'),
-                                                         endTime=request.data.get('endTime'),
-                                                         expectCost=request.data.get('expectCost'))
+    @action(methods=['post'], url_path='create-tripplan', detail=False)
+    def add_tripplan(self, request):
+        data = {k:v for k,v in request.data.items()}
 
-        return Response(serializers.TripPlanSerializer(tripplan).data, status=status.HTTP_201_CREATED)
+        request.user.tripplan_set.create(**data)
+
+        return Response(status=status.HTTP_201_CREATED)
 
 
 class TripPlanViewSet(viewsets.ViewSet, generics.ListAPIView):
-    queryset = TripPlan.objects.all().select_related('user')
+    queryset = TripPlan.objects.all().select_related('user').all()
     serializer_class = serializers.TripPlanDetailSerializer
     pagination_class = paginators.ItemPaginator
 
     def get_queryset(self):
-        queryset = self.queryset.filter(startTime__gt=datetime.datetime.now())
+        queryset = self.queryset.filter(startTime__gt=datetime.datetime.now()).order_by('-created_date')
 
         if self.action.__eq__('list'):
             q = self.request.query_params.get('q')
+
             if q:
                 queryset = queryset.filter(Q(title__icontains=q) | Q(startLocation__icontains=q) |\
                                            Q(trip__destination__icontains=q))\
 
-        return queryset
+            queryset = queryset.annotate(comment_count=Count('comment', distinct=True))
+
+        return queryset.all()
 
     def get_permissions(self):
         if self.action in ['add_comment', 'add_trip']:
@@ -81,24 +84,24 @@ class TripPlanViewSet(viewsets.ViewSet, generics.ListAPIView):
     def add_trip(self, request, pk):
         tripplan = self.get_object()
         if ItemOwner.has_object_permission(self, request, {}, tripplan):
-            try:
-                trip = tripplan.trip_set.create(destination=request.data.get("destination"),
-                                                         travelTime=request.data.get("travelTime"),
-                                                         description=request.data.get("description"),
-                                                         image=request.data.get("image"))
+            tripplan.trip_set.create(destination=request.data.get("destination"),
+                                     travelTime=request.data.get("travelTime"),
+                                     description=request.data.get("description"),
+                                     image=request.data.get("image"))
 
-                return Response(serializers.TripSerializer(trip).data, status=status.HTTP_201_CREATED)
-            except:
-                return utils.UniqueTogetherExcept(request.data.get("destination"))
+            return Response(status=status.HTTP_201_CREATED)
 
         return utils.ResponseBadRequest()
 
     @action(methods=['get'], url_path='comments', detail=True)
     def get_comments(self, request, pk):
-        comments = self.get_object().comment_set.select_related('user').all()
+        userjointripplan = UserJoinTripPlan.objects
+        comments = self.get_object().comment_set.select_related('user')\
+            .annotate(is_join=Exists(Subquery(userjointripplan.filter(user_id=OuterRef('user_id'), tripplan_id=pk)))).all()
 
         pagina = paginators.CommentPaginator()
         page = pagina.paginate_queryset(comments, request)
+
         if page is not None:
             serializer = serializers.CommentSerializer(page, many=True)
 
@@ -111,14 +114,17 @@ class TripPlanViewSet(viewsets.ViewSet, generics.ListAPIView):
     def add_comment(self, request, pk):
         c = self.get_object().comment_set.create(user=request.user, content=request.data.get('content'))
 
+        if UserJoinTripPlan.objects.filter(user_id=request.user.id, tripplan_id=pk).exists():
+            setattr(c, 'is_join', True)
+        else:
+            setattr(c, 'is_join', False)
+
         return Response(serializers.CommentSerializer(c).data,
                         status=status.HTTP_201_CREATED)
 
     @action(methods=['delete'], url_path='delete', detail=True)
     def delete_tripplan(self, request, pk):
         if ItemOwner.has_object_permission(self, request, {}, self.get_object()):
-            trip = self.get_object().trip_set.all()
-            trip.delete()
 
             tripplan = self.get_object()
             tripplan.delete()
@@ -133,25 +139,31 @@ class TripPlanViewSet(viewsets.ViewSet, generics.ListAPIView):
         if ItemOwner.has_object_permission(self, request, {}, tripplan):
             for k, v in request.data.items():
                 setattr(tripplan, k, v)
+
             tripplan.save()
 
-            return Response(serializers.TripPlanDetailSerializer(tripplan).data, status=status.HTTP_200_OK)
+            return Response(status=status.HTTP_200_OK)
 
         return utils.ResponseBadRequest()
 
-    @action(methods=['post'], url_path='user-join', detail=True)
+    @action(methods=['post', 'delete'], url_path='user-join', detail=True)
     def user_join_tripplan(self, request, pk):
         tripplan = self.get_object()
+        user_join_id = request.data.get('user_id')
 
-        if ItemOwner.has_object_permission(self, request, {}, tripplan):
-            user_join = dao.get_user_by_id(id=request.data.get('user_id'))
+        if user_join_id != request.user.id:
+            if ItemOwner.has_object_permission(self, request, {}, tripplan):
+                if request.method.__eq__("POST"):
+                    user_join = dao.get_user_by_id(id=user_join_id)
+                    tripplan.userjointripplan_set.create(user=user_join)
 
-            if user_join.id != request.user.id:
-                user_join_tripplan = self.get_object().userjointripplan_set.create(
-                    user=user_join)
+                    return Response(status=status.HTTP_201_CREATED)
 
-                return Response(serializers.AddUserJoinTripPlanSerializer(user_join_tripplan).data,
-                                status=status.HTTP_201_CREATED)
+                else:
+                    tripplan.userjointripplan_set.filter(user_id=user_join_id).delete()
+
+                    return Response(status=status.HTTP_204_NO_CONTENT)
+
 
         return utils.ResponseBadRequest()
 
@@ -207,6 +219,6 @@ class ReportUserViewSet(viewsets.ViewSet, generics.ListAPIView):
 
 
 class CommentViewSet(viewsets.ViewSet, generics.DestroyAPIView, generics.UpdateAPIView):
-    queryset = Comment.objects.all()
+    queryset = Comment.objects.select_related('user').all()
     serializer_class = serializers.CommentSerializer
     permission_classes = [ItemOwner]
